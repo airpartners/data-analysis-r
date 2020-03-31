@@ -1,0 +1,103 @@
+---
+title: "2_28-3_13_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Set up libraries
+
+```{r}
+library(ggplot2)
+```
+
+## Load CPC data
+
+```{r}
+airdata=read.csv("data_patched.csv",header=T,na.strings="?")
+summary(airdata)
+```
+## convert to datetime format and create subset for easier analysis
+
+```{r}
+airdata$datetime <- as.POSIXct(airdata$timestamp, format = "%Y-%m-%dT%H:%M:%S", tz = "America/New_York")
+datahead = airdata[1:50000,]
+```
+
+## Time-series plot of particle concentration
+
+```{r pressure, echo=FALSE}
+
+# a = indoors, b = outdoors
+
+ggplot(datahead, aes(x=datetime, y=concent, colour=valve)) +
+  geom_point(size=1) + 
+  xlab("")
+```
+
+## Calculating indoor/outdoor particle ratio
+```{r echo=FALSE}
+indoor_data <- data.frame("concent" = double(), "datetime"=double())
+outdoor_data <- data.frame("concent" = double(), "datetime"=double())
+
+
+indoor_vals <- datahead[datahead$valve=="a",]
+outdoor_vals <- datahead[datahead$valve=="b",]
+
+# Get average of each 5-min period
+running_total <- 0
+num_in_group <- 0
+idx <- 0
+for (i in 2:length(indoor_vals$concent)-1) {
+  running_total <- running_total + indoor_vals$concent[[i]]
+  num_in_group <- num_in_group + 1
+  
+  time_diff <- unclass(indoor_vals$datetime[[i+1]]-indoor_vals$datetime[[i]])
+  if (time_diff > 3) {
+    indoor_data[nrow(indoor_data)+1,] = c(running_total/num_in_group, indoor_vals$datetime[[i]])
+    running_total <- 0
+    num_in_group <- 0
+  }
+}
+indoor_data[nrow(indoor_data)+1,] = c(running_total/num_in_group, indoor_vals$datetime[[i]])
+indoor_data$datetime=as.POSIXct(indoor_data$datetime, tz = "America/New_York", origin="1970-01-01")
+
+running_total <- 0
+num_in_group <- 0
+idx <- 0
+for (i in 2:length(outdoor_vals$concent)-1) {
+  running_total <- running_total + outdoor_vals$concent[[i]]
+  num_in_group <- num_in_group + 1
+  
+  time_diff <- unclass(outdoor_vals$datetime[[i+1]]-outdoor_vals$datetime[[i]])
+  if (time_diff > 3) {
+    outdoor_data[nrow(outdoor_data)+1,] = c(running_total/num_in_group, outdoor_vals$datetime[[i]])
+    running_total <- 0
+    num_in_group <- 0
+  }
+}
+outdoor_data[nrow(outdoor_data)+1,] = c(running_total/num_in_group, outdoor_vals$datetime[[i]])
+outdoor_data$datetime=as.POSIXct(outdoor_data$datetime, tz = "America/New_York", origin="1970-01-01")
+```
+
+## plot indoor/outdoor averages
+
+``` {r echo=FALSE}
+ggplot(indoor_vals, aes(x=datetime, y=concent, size=1, color='blue')) +
+  geom_point() + 
+  geom_point(data=outdoor_vals, aes(x=datetime, y=concent, size=1, color='red')) +
+  geom_point(data=indoor_data, aes(x=datetime, y=concent, size=2, color='blue')) +
+  geom_point(data=outdoor_data, aes(x=datetime, y=concent, size=2, color='red'))
+```
+
+``` {r echo=FALSE}
+indoor_outdoor_ratio <- data.frame("ratio" = double(), "datetime"=double())
+for (i in 1:min(length(indoor_data$datetime),length(outdoor_data$datetime))) {
+  indoor_outdoor_ratio[nrow(indoor_outdoor_ratio)+1,] = c(indoor_data$concent[[i]]/outdoor_data$concent[[i]],indoor_data$datetime[[i]])
+}
+indoor_outdoor_ratio$datetime=as.POSIXct(indoor_outdoor_ratio$datetime, tz = "America/New_York", origin="1970-01-01")
+ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
+  geom_line()
+```
