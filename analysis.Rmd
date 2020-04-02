@@ -4,26 +4,27 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ## Set up libraries
 
-```{r}
+```{r echo=FALSE}
 library(ggplot2)
+library(sys)
 ```
 
 ## Load CPC data
 
 ```{r}
-airdata=read.csv("data_patched.csv",header=T,na.strings="?")
-summary(airdata)
+# Before running this, add a .Renviron file to the project directory and add the line data_filename="<path to the .csv containing the data>"
+airdata=read.csv(Sys.getenv("data_filename"),header=T,na.strings="?")
 ```
 ## convert to datetime format and create subset for easier analysis
 
 ```{r}
 airdata$datetime <- as.POSIXct(airdata$timestamp, format = "%Y-%m-%dT%H:%M:%S", tz = "America/New_York")
-datahead = airdata[1:50000,]
+datahead = airdata
 ```
 
 ## Time-series plot of particle concentration
@@ -99,5 +100,8 @@ for (i in 1:min(length(indoor_data$datetime),length(outdoor_data$datetime))) {
 }
 indoor_outdoor_ratio$datetime=as.POSIXct(indoor_outdoor_ratio$datetime, tz = "America/New_York", origin="1970-01-01")
 ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
-  geom_line()
+  geom_line() +
+  geom_hline(yintercept=1, linetype="dashed", color="red") +
+  ylab("indoor/outdoor ratio") +
+  xlab("date/time")
 ```
