@@ -19,35 +19,22 @@ library(sys)
 ```{r}
 # Before running this, add a .Renviron file to the project directory and add the line data_filename="<path to the .csv containing the data>"
 airdata=read.csv(Sys.getenv("data_filename"),header=T,na.strings="?")
-```
-## convert to datetime format and create subset for easier analysis
+airdata$datetime <- as.POSIXct(airdata$timestamp, tz = "America/New_York", format = "%Y-%m-%dT%H:%M:%S", origin="1970-01-01")
+purifier_start_time <- as.POSIXct(Sys.getenv("purifier_start_time"), tz = "America/New_York", format = "%Y-%m-%dT%H:%M:%S")
 
-```{r}
-airdata$datetime <- as.POSIXct(airdata$timestamp, format = "%Y-%m-%dT%H:%M:%S", tz = "America/New_York")
-datahead = airdata
 ```
 
-## Time-series plot of particle concentration
-
-```{r pressure, echo=FALSE}
-
-# a = indoors, b = outdoors
-
-ggplot(datahead, aes(x=datetime, y=concent, colour=valve)) +
-  geom_point(size=1) + 
-  xlab("")
-```
 
 ## Calculating indoor/outdoor particle ratio
 ```{r echo=FALSE}
 indoor_data <- data.frame("concent" = double(), "datetime"=double())
 outdoor_data <- data.frame("concent" = double(), "datetime"=double())
 
+# Filter air data into indoor and outdoor rows
+indoor_vals <- airdata[airdata$valve=="a",]
+outdoor_vals <- airdata[airdata$valve=="b",]
 
-indoor_vals <- datahead[datahead$valve=="a",]
-outdoor_vals <- datahead[datahead$valve=="b",]
-
-# Get average of each 5-min period
+# Get average + SD of each 5-min period for indoor values
 running_total <- 0
 num_in_group <- 0
 idx <- 0
@@ -63,8 +50,8 @@ for (i in 2:length(indoor_vals$concent)-1) {
   }
 }
 indoor_data[nrow(indoor_data)+1,] = c(running_total/num_in_group, indoor_vals$datetime[[i]])
-indoor_data$datetime=as.POSIXct(indoor_data$datetime, tz = "America/New_York", origin="1970-01-01")
 
+# Get average + SD of each 5-min period for outdoor values
 running_total <- 0
 num_in_group <- 0
 idx <- 0
@@ -80,7 +67,32 @@ for (i in 2:length(outdoor_vals$concent)-1) {
   }
 }
 outdoor_data[nrow(outdoor_data)+1,] = c(running_total/num_in_group, outdoor_vals$datetime[[i]])
-outdoor_data$datetime=as.POSIXct(outdoor_data$datetime, tz = "America/New_York", origin="1970-01-01")
+```
+
+``` {r echo=FALSE}
+# Time that the HEPA purifier was started in the classroom
+
+# Create data frame for storing indoor/outdoor particle concentration ratio
+indoor_outdoor_ratio <- data.frame("ratio" = double(), "datetime"=double())
+for (i in 1:min(length(indoor_data$datetime),length(outdoor_data$datetime))) {
+  if (outdoor_data$concent[[i]] > 1) {
+    indoor_outdoor_ratio[nrow(indoor_outdoor_ratio)+1,] = c(indoor_data$concent[[i]]/outdoor_data$concent[[i]],indoor_data$datetime[[i]])
+  }
+}
+indoor_outdoor_ratio$datetime <- as.POSIXct(indoor_outdoor_ratio$datetime, tz="America/New_York", origin="1970-01-01")
+
+before_purifier_mean <- mean((indoor_outdoor_ratio[indoor_outdoor_ratio$datetime < purifier_start_time,])$ratio)
+after_purifier_mean <- mean((indoor_outdoor_ratio[indoor_outdoor_ratio$datetime > purifier_start_time,])$ratio)
+
+ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
+  geom_line() +
+  geom_hline(yintercept=1, linetype="dashed", color="blue") +
+  geom_hline(yintercept=before_purifier_mean, linetype="solid", color="red") +
+  geom_hline(yintercept=after_purifier_mean, linetype="solid", color="green") +
+  geom_vline(xintercept=purifier_start_time, linetype="dashed", color="blue") +
+  ylab("indoor/outdoor ratio") +
+  xlab("date/time") +
+  ylim(0,2)
 ```
 
 ## plot indoor/outdoor averages
@@ -91,17 +103,4 @@ ggplot(indoor_vals, aes(x=datetime, y=concent, size=1, color='blue')) +
   geom_point(data=outdoor_vals, aes(x=datetime, y=concent, size=1, color='red')) +
   geom_point(data=indoor_data, aes(x=datetime, y=concent, size=2, color='blue')) +
   geom_point(data=outdoor_data, aes(x=datetime, y=concent, size=2, color='red'))
-```
-
-``` {r echo=FALSE}
-indoor_outdoor_ratio <- data.frame("ratio" = double(), "datetime"=double())
-for (i in 1:min(length(indoor_data$datetime),length(outdoor_data$datetime))) {
-  indoor_outdoor_ratio[nrow(indoor_outdoor_ratio)+1,] = c(indoor_data$concent[[i]]/outdoor_data$concent[[i]],indoor_data$datetime[[i]])
-}
-indoor_outdoor_ratio$datetime=as.POSIXct(indoor_outdoor_ratio$datetime, tz = "America/New_York", origin="1970-01-01")
-ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
-  geom_line() +
-  geom_hline(yintercept=1, linetype="dashed", color="red") +
-  ylab("indoor/outdoor ratio") +
-  xlab("date/time")
 ```
