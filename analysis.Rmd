@@ -19,54 +19,46 @@ library(sys)
 ```{r}
 # Before running this, add a .Renviron file to the project directory and add the line data_filename="<path to the .csv containing the data>"
 airdata=read.csv(Sys.getenv("data_filename"),header=T,na.strings="?")
+airdata <- na.omit(airdata[airdata$err_num==0,])
 airdata$datetime <- as.POSIXct(airdata$timestamp, tz = "America/New_York", format = "%Y-%m-%dT%H:%M:%S", origin="1970-01-01")
 purifier_start_time <- as.POSIXct(Sys.getenv("purifier_start_time"), tz = "America/New_York", format = "%Y-%m-%dT%H:%M:%S")
 
 ```
 
-
 ## Calculating indoor/outdoor particle ratio
 ```{r echo=FALSE}
-indoor_data <- data.frame("concent" = double(), "datetime"=double())
-outdoor_data <- data.frame("concent" = double(), "datetime"=double())
+indoor_data <- data.frame("concent" = double(), "sd"=double(), "datetime"=double())
+outdoor_data <- data.frame("concent" = double(), "sd"=double(), "datetime"=double())
 
 # Filter air data into indoor and outdoor rows
 indoor_vals <- airdata[airdata$valve=="a",]
 outdoor_vals <- airdata[airdata$valve=="b",]
 
 # Get average + SD of each 5-min period for indoor values
-running_total <- 0
-num_in_group <- 0
-idx <- 0
+start_idx <- 1
 for (i in 2:length(indoor_vals$concent)-1) {
-  running_total <- running_total + indoor_vals$concent[[i]]
-  num_in_group <- num_in_group + 1
-  
   time_diff <- unclass(indoor_vals$datetime[[i+1]]-indoor_vals$datetime[[i]])
   if (time_diff > 3) {
-    indoor_data[nrow(indoor_data)+1,] = c(running_total/num_in_group, indoor_vals$datetime[[i]])
-    running_total <- 0
-    num_in_group <- 0
+    section = indoor_vals[start_idx:i,]
+    indoor_data[nrow(indoor_data)+1,] = c(mean(section$concent), sd(section$concent), indoor_vals$datetime[[i]])
+    start_idx = i+1
   }
 }
-indoor_data[nrow(indoor_data)+1,] = c(running_total/num_in_group, indoor_vals$datetime[[i]])
+section = indoor_vals[start_idx:i,]
+indoor_data[nrow(indoor_data)+1,] = c(mean(section$concent), sd(section$concent), indoor_vals$datetime[[i]])
 
 # Get average + SD of each 5-min period for outdoor values
-running_total <- 0
-num_in_group <- 0
-idx <- 0
+start_idx <- 1
 for (i in 2:length(outdoor_vals$concent)-1) {
-  running_total <- running_total + outdoor_vals$concent[[i]]
-  num_in_group <- num_in_group + 1
-  
   time_diff <- unclass(outdoor_vals$datetime[[i+1]]-outdoor_vals$datetime[[i]])
   if (time_diff > 3) {
-    outdoor_data[nrow(outdoor_data)+1,] = c(running_total/num_in_group, outdoor_vals$datetime[[i]])
-    running_total <- 0
-    num_in_group <- 0
+    section = outdoor_vals[start_idx:i,]
+    outdoor_data[nrow(outdoor_data)+1,] = c(mean(section$concent), sd(section$concent), outdoor_vals$datetime[[i]])
+    start_idx = i+1
   }
 }
-outdoor_data[nrow(outdoor_data)+1,] = c(running_total/num_in_group, outdoor_vals$datetime[[i]])
+section = outdoor_vals[start_idx:i,]
+outdoor_data[nrow(outdoor_data)+1,] = c(mean(section$concent), sd(section$concent), outdoor_vals$datetime[[i]])
 ```
 
 ``` {r echo=FALSE}
@@ -84,6 +76,9 @@ indoor_outdoor_ratio$datetime <- as.POSIXct(indoor_outdoor_ratio$datetime, tz="A
 before_purifier_mean <- mean((indoor_outdoor_ratio[indoor_outdoor_ratio$datetime < purifier_start_time,])$ratio)
 after_purifier_mean <- mean((indoor_outdoor_ratio[indoor_outdoor_ratio$datetime > purifier_start_time,])$ratio)
 
+```
+
+```{r}
 ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
   geom_line() +
   geom_hline(yintercept=1, linetype="dashed", color="blue") +
@@ -92,15 +87,23 @@ ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
   geom_vline(xintercept=purifier_start_time, linetype="dashed", color="blue") +
   ylab("indoor/outdoor ratio") +
   xlab("date/time") +
-  ylim(0,2)
+  scale_y_continuous(trans='log10') 
+```
+
+```{r}
+indoor_data$datetime <- as.POSIXct(indoor_data$datetime, tz="America/New_York", origin="1970-01-01")
+outdoor_data$datetime <- as.POSIXct(outdoor_data$datetime, tz="America/New_York", origin="1970-01-01")
+ggplot(indoor_data, aes(x=datetime, y=sd, size=1, color='blue')) +
+  geom_point(data=outdoor_data, aes(x=datetime, y=sd, size=1, color='red')) 
+
 ```
 
 ## plot indoor/outdoor averages
 
 ``` {r echo=FALSE}
 ggplot(indoor_vals, aes(x=datetime, y=concent, size=1, color='blue')) +
-  geom_point() + 
-  geom_point(data=outdoor_vals, aes(x=datetime, y=concent, size=1, color='red')) +
-  geom_point(data=indoor_data, aes(x=datetime, y=concent, size=2, color='blue')) +
-  geom_point(data=outdoor_data, aes(x=datetime, y=concent, size=2, color='red'))
+  #geom_point() + 
+ # geom_point(data=outdoor_vals, aes(x=datetime, y=concent, size=1, color='red')) +
+  geom_point(data=indoor_data, aes(x=datetime, y=concent, size=2, color='blue')) 
+  #geom_point(data=outdoor_data, aes(x=datetime, y=concent, size=2, color='red'))
 ```
