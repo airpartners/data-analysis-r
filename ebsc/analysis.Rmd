@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(ggplot2)
+library(grid)
 library(sys)
 ```
 
@@ -78,20 +79,25 @@ indoor_outdoor_ratio$datetime <- as.POSIXct(indoor_outdoor_ratio$datetime, tz="A
 before_purifier_mean <- mean((indoor_outdoor_ratio[indoor_outdoor_ratio$datetime < purifier_start_time,])$ratio)
 after_purifier_mean <- mean((indoor_outdoor_ratio[indoor_outdoor_ratio$datetime > purifier_start_time,])$ratio)
 
+ratio_means = data.frame("mean" = c(before_purifier_mean, after_purifier_mean), "state" = c("before HEPA purifier", "after HEPA purifier"))
+
 ```
 
 ## Plot mean particle concentration ratio for before/after HEPA purifier installation
 
 ```{r}
+final_time <- tail(indoor_outdoor_ratio, 1)$datetime
 ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
   geom_line() +
   geom_hline(yintercept=1, linetype="dashed", color="blue") +
-  geom_hline(yintercept=before_purifier_mean, linetype="solid", color="red") +
-  geom_hline(yintercept=after_purifier_mean, linetype="solid", color="green") +
   geom_vline(xintercept=purifier_start_time, linetype="dashed", color="blue") +
+  geom_text(data=ratio_means, aes(label = "purifier turned on", x = purifier_start_time, y = 10)) +
   ylab("indoor/outdoor ratio") +
-  xlab("date/time") +
-  ylim(0, 10)
+  xlab("date/time") + 
+  scale_y_log10(limits=c(1e-2,1e1)) +
+  geom_hline(yintercept=ratio_means$mean, linetype="solid", color=c("red", "green")) +
+      geom_text(data=ratio_means, aes(label = state, x = final_time, y = mean-0.1), hjust=1)
+
 ```
 
 ## Plot st. dev of concentration levels within each five-minute period
