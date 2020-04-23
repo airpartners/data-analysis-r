@@ -11,7 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(ggplot2)
-library(grid)
 library(sys)
 ```
 
@@ -85,18 +84,18 @@ ratio_means = data.frame("mean" = c(before_purifier_mean, after_purifier_mean), 
 
 ## Plot mean particle concentration ratio for before/after HEPA purifier installation
 
-```{r}
+```{r fig.width=10}
 final_time <- tail(indoor_outdoor_ratio, 1)$datetime
 ggplot(indoor_outdoor_ratio, aes(x=datetime, y=ratio)) +
-  geom_line() +
+  geom_line(size=1) +
   geom_hline(yintercept=1, linetype="dashed", color="blue") +
   geom_vline(xintercept=purifier_start_time, linetype="dashed", color="blue") +
-  geom_text(data=ratio_means, aes(label = "purifier turned on", x = purifier_start_time, y = 10)) +
-  ylab("indoor/outdoor ratio") +
+ # geom_text(data=ratio_means, aes(label = "purifier turned on", x = purifier_start_time, y = 10)) +
+  ylab("indoor/outdoor particle ratio") +
   xlab("date/time") + 
   scale_y_log10(limits=c(1e-2,1e1)) +
-  geom_hline(yintercept=ratio_means$mean, linetype="solid", color=c("red", "green")) +
-      geom_text(data=ratio_means, aes(label = state, x = final_time, y = mean-0.1), hjust=1)
+  geom_hline(yintercept=ratio_means$mean, linetype="solid", color=c("red", "green"))
+#      geom_text(data=ratio_means, aes(label = state, x = final_time, y = mean-0.1), hjust=1)
 
 ```
 
@@ -109,4 +108,10 @@ ggplot(indoor_data, aes(x=datetime, y=sd)) +
   geom_point(color='blue', size=1) +
   geom_point(data=outdoor_data, aes(x=datetime, y=sd), size=1, color='red')
 
+```
+
+```{r}
+metdata_clean$datetime <- as.POSIXct(metdata_clean$valid, tz = "America/New_York", format = "%Y-%m-%d %H:%M", origin="1970-01-01")
+ggplot(rbind(indoor_data, outdoor_data), aes(x=datetime,y=concent)) + geom_point() +
+  geom_point(data=metdata_clean, aes(x=datetime, y=relh))
 ```
